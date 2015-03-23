@@ -52,20 +52,6 @@ class WC_Gateway_SecureSubmit_Subscriptions extends WC_Gateway_SecureSubmit
 
             $chargeService = new HpsCreditService($config);
 
-            $hpsaddress = new HpsAddress();
-            $hpsaddress->address = $order->billing_address_1;
-            $hpsaddress->city = $order->billing_city;
-            $hpsaddress->state = $order->billing_state;
-            $hpsaddress->zip = preg_replace('/[^a-zA-Z0-9]/', '', $order->billing_postcode);
-            $hpsaddress->country = $order->billing_country;
-
-            $cardHolder = new HpsCardHolder();
-            $cardHolder->firstName = $order->billing_first_name;
-            $cardHolder->lastName = $order->billing_last_name;
-            $cardHolder->phone = preg_replace('/[^0-9]/', '', $order->billing_phone);
-            $cardHolder->emailAddress = $order->billing_email;
-            $cardHolder->address = $hpsaddress;
-
             $hpstoken = new HpsTokenData();
 
             if (is_user_logged_in() && isset($_POST['secure_submit_card']) && $_POST['secure_submit_card'] !== 'new') {
@@ -95,7 +81,7 @@ class WC_Gateway_SecureSubmit_Subscriptions extends WC_Gateway_SecureSubmit
                         $order->order_total,
                         strtolower(get_woocommerce_currency()),
                         $hpstoken,
-                        $cardHolder,
+                        getCardHolder($order),
                         $saveCardToCustomer, // multi-use
                         $details
                     );
@@ -104,7 +90,7 @@ class WC_Gateway_SecureSubmit_Subscriptions extends WC_Gateway_SecureSubmit
                         $order->order_total,
                         strtolower(get_woocommerce_currency()),
                         $hpstoken,
-                        $cardHolder,
+                        getCardHolder($order),
                         $saveCardToCustomer, // multi-use
                         $details
                     );
@@ -157,7 +143,7 @@ class WC_Gateway_SecureSubmit_Subscriptions extends WC_Gateway_SecureSubmit
         $token = get_post_meta($new->id, '_securesubmit_card_token', true);
 
         if (!isset($token)) {
-            return new WP_Error();
+            return new WP_Error('subscription_payment', 'Token not found.');
         }
 
         if (!isset($this->paymentaction)) {
@@ -169,44 +155,37 @@ class WC_Gateway_SecureSubmit_Subscriptions extends WC_Gateway_SecureSubmit
             $details = new HpsTransactionDetails();
             $details->invoiceNumber = $order->id;
 
-            $hpsaddress = new HpsAddress();
-            $hpsaddress->address = $order->billing_address_1;
-            $hpsaddress->city = $order->billing_city;
-            $hpsaddress->state = $order->billing_state;
-            $hpsaddress->zip = preg_replace('/[^a-zA-Z0-9]/', '', $order->billing_postcode);
-            $hpsaddress->country = $order->billing_country;
-
-            $cardHolder = new HpsCardHolder();
-            $cardHolder->firstName = $order->billing_first_name;
-            $cardHolder->lastName = $order->billing_last_name;
-            $cardHolder->phone = preg_replace('/[^0-9]/', '', $order->billing_phone);
-            $cardHolder->emailAddress = $order->billing_email;
-            $cardHolder->address = $hpsaddress;
-
-            if ($this->paymentaction == 'sale') {
-                $response = $chargeService->charge(
-                    $amount,
-                    strtolower(get_woocommerce_currency()),
-                    $token,
-                    $cardHolder,
-                    false,
-                    $details
-                );
-            } else {
-                $response = $chargeService->authorize(
-                    $amount,
-                    strtolower(get_woocommerce_currency()),
-                    $token,
-                    $cardHolder,
-                    false,
-                    $details
-                );
-            }
+            $response = $chargeService->charge(
+                $amount,
+                strtolower(get_woocommerce_currency()),
+                $token,
+                getCardHolder($order),
+                false,
+                $details
+            );
 
             return true;
         } catch (Exception $e) {
-            return new WP_Error();
+            return new WP_Error('subscription_payment', $e->getMessage());
         }
+    }
+
+    public function getCardHolder($order) {
+        $hpsaddress = new HpsAddress();
+        $hpsaddress->address = $order->billing_address_1;
+        $hpsaddress->city = $order->billing_city;
+        $hpsaddress->state = $order->billing_state;
+        $hpsaddress->zip = preg_replace('/[^a-zA-Z0-9]/', '', $order->billing_postcode);
+        $hpsaddress->country = $order->billing_country;
+
+        $cardHolder = new HpsCardHolder();
+        $cardHolder->firstName = $order->billing_first_name;
+        $cardHolder->lastName = $order->billing_last_name;
+        $cardHolder->phone = preg_replace('/[^0-9]/', '', $order->billing_phone);
+        $cardHolder->emailAddress = $order->billing_email;
+        $cardHolder->address = $hpsaddress;
+
+        return $cardHolder;
     }
 
     public function scheduledSubscriptionPayment($amount, $order, $productId)
